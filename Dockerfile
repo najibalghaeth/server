@@ -6,7 +6,7 @@ LABEL maintainer="ownCloud DevOps <devops@owncloud.com>" \
   org.label-schema.schema-version="1.0"
 
 ADD owncloud-*.tar.bz2 /var/www/
-ADD richdocuments.tar.gz.tar.gz /var/www/owncloud/apps/
+ADD richdocuments.tar.gz /var/www/owncloud/apps/
 
 RUN mv /var/www/owncloud/apps/richdocuments-* /var/www/owncloud/apps/richdocuments
 
