@@ -1,0 +1,167 @@
+workspace:
+  base: /drone
+  path: src/github.com/owncloud-docker/server
+
+branches:
+  - master
+  - 9.1.x
+  - 9.0.x
+
+clone:
+  git:
+    image: plugins/git:1
+    pull: true
+
+pipeline:
+  tarball:
+    image: plugins/download:latest
+    pull: true
+    secrets: [ download_username, download_password ]
+    source: https://download.owncloud.org/community/owncloud-${CORE_VERSION}.tar.bz2
+    sha256: ${CORE_CHECKSUM}
+
+  documents:
+    image: plugins/download:latest
+    pull: true
+    source: https://github.com/owncloud/richdocuments/archive/${DOCUMENTS_VERSION}.tar.gz
+    destination: richdocuments.tar.gz
+    sha256: ${DOCUMENTS_CHECKSUM}
+
+  wait:
+    image: owncloud/ubuntu:latest
+    pull: true
+    commands:
+      - wait-for-it -t 600 docker:2375
+
+  build:
+    image: toolhippie/docker:latest
+    pull: true
+    environment:
+      - DOCKER_HOST=tcp://docker:2375
+    commands:
+      - docker build -t owncloud/server:latest .
+
+  server:
+    image: toolhippie/docker:latest
+    pull: true
+    detach: true
+    environment:
+      - DOCKER_HOST=tcp://docker:2375
+    commands:
+      - docker run -p 8000:80 owncloud/server:latest
+
+  test:
+    image: owncloud/ubuntu:latest
+    pull: true
+    commands:
+      - wait-for-it -t 600 docker:8000
+      - curl -sSIf http://docker:8000/status.php
+
+  publish:
+    image: toolhippie/docker:latest
+    pull: true
+    secrets: [ docker_username, docker_password ]
+    environment:
+      - DOCKER_HOST=tcp://docker:2375
+    commands:
+      - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+      - |
+        for IMAGE in ${IMAGE_TAGS}; do
+          docker tag owncloud/owncloud:latest owncloud/owncloud:$IMAGE
+          docker push owncloud/owncloud:$IMAGE
+        done
+    when:
+      event: [ push ]
+
+  microbadger:
+    image: plugins/webhook:1
+    pull: true
+    secrets: [ webhook_urls ]
+    when:
+      local: false
+      event: [ push ]
+
+  slack:
+    image: plugins/slack:1
+    pull: true
+    secrets: [ slack_webhook ]
+    channel: docker
+    template: >
+      *{{build.status}}* <{{build.link}}|{{repo.owner}}/{{repo.name}}#{{truncate build.commit 8}}> @ ${CORE_VERSION}
+    when:
+      local: false
+      event: [ push ]
+      status: [ changed, failure ]
+
+services:
+  docker:
+    image: docker:18.04-dind
+
+matrix:
+  include:
+    - CORE_VERSION: 9.0.11
+      CORE_CHECKSUM: 99b5bb5f799e2cd6275ec0a5c633e940318038b4009fc125a23275b8666d41ec
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.11 9.0
+
+    - CORE_VERSION: 9.0.10
+      CORE_CHECKSUM: dca06f13500bf01b4b54c2229d43d032901b60b9976aef55176199f02c573ef5
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.10
+
+    - CORE_VERSION: 9.0.9
+      CORE_CHECKSUM: e9ba25de52f7455487604a4e4f775de0dca14c045a82aef7bc002764b9e0ea1a
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.9
+
+    - CORE_VERSION: 9.0.8
+      CORE_CHECKSUM: 91b75fbab72ee3279310138045e3df4de4f2b65902ca6a19db3a054c4039adc8
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.8
+
+    - CORE_VERSION: 9.0.7
+      CORE_CHECKSUM: d028bc76e208fd891ecad8f7beb6cd303167451a16fda154051b30d848cbddc8
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.7
+
+    - CORE_VERSION: 9.0.6
+      CORE_CHECKSUM: 2addd94cb537c52291e0d77d57fe8c0c64ceb59e24dbec96c2a73e84f7bb5c44
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.6
+
+    - CORE_VERSION: 9.0.5
+      CORE_CHECKSUM: c8c2c4f7a06208f006762740ca6bb6a4c4d8362fc8d226dcccb82b970993f7c5
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.5
+
+    - CORE_VERSION: 9.0.4
+      CORE_CHECKSUM: ab71e8648c918629f6551333c45dd3b79d90f1dc0171d3def0a443bdc238a669
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.4
+
+    - CORE_VERSION: 9.0.3
+      CORE_CHECKSUM: 5cf45c1b75434496635a58fcbece668bc0abb40f04d8304ce6d01e6b75887f60
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.3
+
+    - CORE_VERSION: 9.0.2
+      CORE_CHECKSUM: 845c43fe981fa0fd07fc3708f41f1ea15ecb11c2a15c65a4de191fc85b237c74
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.2
+
+    - CORE_VERSION: 9.0.0
+      CORE_CHECKSUM: d16737510a77a81489f7c4d5e19b0756fa2ea1c5081ba174b0fec0f00da3a77c
+      DOCUMENTS_VERSION: 1.1.28
+      DOCUMENTS_CHECKSUM: cb7672b655c25bfe5aa4e47737fec5ee371e8703495feadf708bc2bf8a238ba1
+      IMAGE_TAGS: 9.0.0
+
