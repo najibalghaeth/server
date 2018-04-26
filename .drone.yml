@@ -1,0 +1,98 @@
+workspace:
+  base: /drone
+  path: src/github.com/owncloud-docker/server
+
+branches:
+  - daily
+
+clone:
+  git:
+    image: plugins/git:1
+    pull: true
+
+pipeline:
+  tarball:
+    image: plugins/download:latest
+    pull: true
+    secrets: [ download_username, download_password ]
+    source: https://download.owncloud.org/community/owncloud-daily-${CORE_VERSION}.tar.bz2
+
+  wait:
+    image: owncloud/ubuntu:latest
+    pull: true
+    commands:
+      - wait-for-it -t 600 docker:2375
+
+  build:
+    image: toolhippie/docker:latest
+    pull: true
+    environment:
+      - DOCKER_HOST=tcp://docker:2375
+    commands:
+      - docker build --build-arg BASE_IMAGE=${BASE_IMAGE} -t owncloud/server:latest .
+
+  server:
+    image: toolhippie/docker:latest
+    pull: true
+    detach: true
+    environment:
+      - DOCKER_HOST=tcp://docker:2375
+    commands:
+      - docker run -p 8000:80 owncloud/server:latest
+
+  test:
+    image: owncloud/ubuntu:latest
+    pull: true
+    commands:
+      - wait-for-it -t 600 docker:8000
+      - curl -sSf http://docker:8000/status.php
+
+  publish:
+    image: toolhippie/docker:latest
+    pull: true
+    secrets: [ docker_username, docker_password ]
+    environment:
+      - DOCKER_HOST=tcp://docker:2375
+    commands:
+      - docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+      - |
+        for IMAGE in ${IMAGE_TAGS}; do
+          docker tag owncloud/server:latest owncloud/server:$IMAGE
+          docker push owncloud/server:$IMAGE
+        done
+    when:
+      event: [ push ]
+
+  microbadger:
+    image: plugins/webhook:1
+    pull: true
+    secrets: [ webhook_urls ]
+    when:
+      local: false
+      event: [ push ]
+
+  slack:
+    image: plugins/slack:1
+    pull: true
+    secrets: [ slack_webhook ]
+    channel: docker
+    template: >
+      *{{build.status}}* <{{build.link}}|{{repo.owner}}/{{repo.name}}#{{truncate build.commit 8}}> @ ${CORE_VERSION}
+    when:
+      local: false
+      event: [ push ]
+      status: [ changed, failure ]
+
+services:
+  docker:
+    image: docker:18.04-dind
+
+matrix:
+  include:
+    - CORE_VERSION: master
+      IMAGE_TAGS: daily-master
+      BASE_IMAGE: owncloud/base:bionic
+
+    - CORE_VERSION: stable10
+      IMAGE_TAGS: daily-stable10
+      BASE_IMAGE: owncloud/base:xenial
