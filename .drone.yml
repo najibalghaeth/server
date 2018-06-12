@@ -3,9 +3,7 @@ workspace:
   path: src/github.com/owncloud-docker/server
 
 branches:
-  - master
   - 9.1.x
-  - 9.0.x
 
 clone:
   git:
